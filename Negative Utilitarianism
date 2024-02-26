@@ -1,0 +1,59 @@
+import random
+
+def findBenthamLeastHarmValueOfCell(agent, cell):
+    cellSiteWealth = cell.sugar + cell.spice
+    globalMaxCombatLoot = cell.environment.maxCombatLoot * 2
+    cellMaxSiteWealth = cell.maxSugar + cell.maxSpice
+    if cell.agent != None:
+        cellSiteWealth += min(cell.agent.wealth, globalMaxCombatLoot)
+        cellMaxSiteWealth += min(cell.agent.wealth, globalMaxCombatLoot)
+    cellNeighborWealth = cell.findNeighborWealth()
+    globalMaxWealth = cell.environment.globalMaxSugar + cell.environment.globalMaxSpice
+    
+    positiveCellValue = 0
+    negativeCellValue = 0
+    selfishnessFactor = agent.selfishnessFactor
+    
+    for neighbor in agent.neighborhood:
+        timestepDistance = 1
+        neighborMetabolism = neighbor.sugarMetabolism + neighbor.spiceMetabolism
+        cellDuration = cellSiteWealth / neighborMetabolism if neighborMetabolism > 0 else 0
+        certainty = 1 if neighbor.canReachCell(cell) == True else 0
+        proximity = 1 / timestepDistance
+        intensity = (1 / (1 + neighbor.findTimeToLive()) / (1 + cell.pollution))
+        duration = cellDuration / cellMaxSiteWealth if cellMaxSiteWealth > 0 else 0
+        discount = 0.5
+        futureDuration = (cellSiteWealth - neighborMetabolism) / neighborMetabolism if neighborMetabolism > 0 else cellSiteWealth
+        futureDuration = futureDuration / cellMaxSiteWealth if cellMaxSiteWealth > 0 else 0
+        futureIntensity = cellNeighborWealth / (globalMaxWealth * 4)
+        extent = len(agent.neighborhood) / (neighbor.vision * 4) if neighbor.vision > 0 else 1
+        futureExtent = len(agent.findNeighborhood(cell)) / (neighbor.vision * 4) if neighbor.vision > 0 else 1
+        
+        neighborValueOfCell = neighbor.decisionModelFactor * ((certainty * proximity) * ((extent * (intensity + duration)) + (discount * (futureExtent * (futureIntensity + futureDuration)))))
+        
+        # Adjusting for agent and neighborhood conditions
+        if neighbor != agent and cell != neighbor.cell:
+            negativeCellValue += neighborValueOfCell  # Considering as potential harm
+        elif neighbor != agent and cell == neighbor.cell:
+            negativeCellValue += neighborValueOfCell  # Direct conflict as harm
+            if neighborValueOfCell > -1:
+                negativeCellValue += 1 
+        else:
+            positiveCellValue += neighborValueOfCell  # Beneficial actions
+        
+        # Adjusting values based on selfishness factor
+        if selfishnessFactor != -1:
+            if neighbor == agent:
+                positiveCellValue *= selfishnessFactor
+            else:
+                negativeCellValue *= (1 - selfishnessFactor)  # Minimize harm to others
+
+        if positiveCellValue == negativeCellValue:
+            return positiveCellValue
+        else:
+            # Prioritize action where negativeCellValue is minimized (closest to zero)
+            if negativeCellValue >= 0:
+                return positiveCellValue if positiveCellValue > abs(negativeCellValue) else negativeCellValue
+            else:
+                # If both values are negative, choose the less negative (closer to zero)
+                return negativeCellValue if abs(negativeCellValue) < positiveCellValue else positiveCellValue
